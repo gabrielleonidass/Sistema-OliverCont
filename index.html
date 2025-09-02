@@ -285,7 +285,7 @@
             <h3>URL da Pasta no Google Drive</h3>
             <p>Cole o link da pasta principal que contém as subpastas dos clientes</p>
             <input type="text" id="folderUrl" placeholder="https://drive.google.com/drive/folders/ABC123...">
-            <button id="processFolderBtn">Processar Pasta</button>
+            <button id="processFolderBtn">Processar Pasta</button> <br><br>
         </div>
         
         <div class="progress-container">
@@ -374,6 +374,350 @@
             setTimeout(checkGoogleAPIs, 2000);
         }
     }
+
+    async function verificarEstruturaPastas(folder) {
+    try {
+        // Filtra apenas pastas que começam com LP, LR, ASSOC., MEI, C, COO, SN
+        const prefixosPermitidos = ['LP', 'LR', 'ASSOC.', 'MEI', 'C', 'COO', 'SN'];
+        const comecaComPrefixos = prefixosPermitidos.some(prefixo => 
+            folder.name.toUpperCase().startsWith(prefixo.toUpperCase())
+        );
+        
+        if (!comecaComPrefixos) {
+            return null; // Retorna null para pastas que não devem ser verificadas
+        }
+        
+        console.log(`Verificando pasta: ${folder.name}`);
+        
+        // Lista todas as pastas dentro da pasta do cliente
+        const response = await makeDriveRequest('files', {
+            q: `'${folder.id}' in parents and mimeType = 'application/vnd.google-apps.folder'`,
+            fields: 'files(id, name)',
+            pageSize: 50
+        });
+        
+        const pastasEncontradas = response.files.map(p => p.name.toUpperCase());
+        
+        // DEFINE O PADRÃO CORRETO
+        const obrigatoriasGeral = [
+            '1 DEPTO CONTABIL',
+            '2 DEPTO FISCAL',
+            '3 DEPTO PESSOAL', 
+            '4 DEPTO LEGALIZAÇÃO',
+            'CERTIDÕES',
+            'CERTIFICADO DIGITAL',
+            'DIVERSOS',
+            'PROCURADORIA'
+        ];
+        
+        // Verifica se é SN, MEI, LP ou LR (não precisam de ASSEMBLEIAS e OCEB)
+        const isSN = folder.name.toUpperCase().startsWith('SN');
+        const isMEI = folder.name.toUpperCase().startsWith('MEI');
+        const isLP = folder.name.toUpperCase().startsWith('LP');
+        const isLR = folder.name.toUpperCase().startsWith('LR');
+        
+        // Define as obrigatórias baseado no tipo
+        let pastasObrigatorias = [...obrigatoriasGeral];
+        
+        // Apenas clientes NORMAIS (não SN, MEI, LP, LR) precisam de ASSEMBLEIAS e OCEB
+        if (!isSN && !isMEI && !isLP && !isLR) {
+            pastasObrigatorias.push('ASSEMBLEIAS');
+            pastasObrigatorias.push('OCEB');
+        }
+        
+        // Verifica quais pastas obrigatórias estão faltando
+        const pastasFaltantes = pastasObrigatorias.filter(pasta => 
+            !pastasEncontradas.includes(pasta.toUpperCase())
+        );
+        
+        return {
+            cliente: folder.name,
+            pastasEncontradas: pastasEncontradas,
+            pastasFaltantes: pastasFaltantes,
+            pastasExtras: [],
+            estaNoPadrao: pastasFaltantes.length === 0,
+            isSN: isSN,
+            isMEI: isMEI,
+            isLP: isLP,
+            isLR: isLR,
+            tipo: isSN ? 'SN' : isMEI ? 'MEI' : isLP ? 'LP' : isLR ? 'LR' : 'Normal'
+        };
+        
+    } catch (error) {
+        console.error(`Erro ao verificar pasta ${folder.name}:`, error);
+        return {
+            cliente: folder.name,
+            pastasEncontradas: [],
+            pastasFaltantes: [],
+            pastasExtras: [],
+            estaNoPadrao: false,
+            erro: error.message,
+            tipo: 'Erro'
+        };
+    }
+}
+
+
+function exibirVerificacaoEstrutura(resultados) {
+    // Filtra resultados nulos (pastas que não deveriam ser verificadas)
+    const resultadosFiltrados = resultados.filter(r => r !== null);
+    
+    // Remove verificação anterior se existir
+    const verificacaoAnterior = document.getElementById('verificacao-estrutura');
+    if (verificacaoAnterior) {
+        verificacaoAnterior.remove();
+    }
+    
+    if (resultadosFiltrados.length === 0) {
+        alert('Nenhuma pasta com os prefixos LP, LR, ASSOC., MEI, C, COO ou SN foi encontrada!');
+        return;
+    }
+    
+    const container = document.createElement('div');
+    container.id = 'verificacao-estrutura';
+    container.style.marginTop = '30px';
+    container.style.padding = '20px';
+    container.style.backgroundColor = '#f8f9fa';
+    container.style.borderRadius = '8px';
+    container.style.border = '1px solid #ddd';
+    
+    const clientesForaPadrao = resultadosFiltrados.filter(r => !r.estaNoPadrao);
+    const clientesNoPadrao = resultadosFiltrados.filter(r => r.estaNoPadrao);
+    
+    container.innerHTML = `
+        <h3>📁 Verificação de Estrutura de Pastas</h3>
+        <p><strong>Clientes verificados:</strong> ${resultadosFiltrados.length} (apenas LP, LR, ASSOC., MEI, C, COO, SN)</p>
+        <p style="color: green;"><strong>✅ No padrão:</strong> ${clientesNoPadrao.length}</p>
+        <p style="color: red;"><strong>❌ Fora do padrão:</strong> ${clientesForaPadrao.length}</p>
+        <div id="detalhesEstrutura" style="display: none;">
+            <h4>Clientes Fora do Padrão:</h4>
+    `;
+    
+    if (clientesForaPadrao.length > 0) {
+        const tabela = document.createElement('table');
+        tabela.style.width = '100%';
+        tabela.style.borderCollapse = 'collapse';
+        tabela.style.marginTop = '15px';
+        
+        tabela.innerHTML = `
+            <thead>
+                <tr>
+                    <th style="padding: 10px; border: 1px solid #ddd; background: #e9ecef;">Cliente</th>
+                    <th style="padding: 10px; border: 1px solid #ddd; background: #e9ecef;">Tipo</th>
+                    <th style="padding: 10px; border: 1px solid #ddd; background: #e9ecef;">Pastas Faltantes</th>
+                </tr>
+            </thead>
+            <tbody>
+                ${clientesForaPadrao.map(resultado => `
+                    <tr>
+                        <td style="padding: 8px; border: 1px solid #ddd;">${resultado.cliente}</td>
+                        <td style="padding: 8px; border: 1px solid #ddd;">
+                            ${resultado.tipo}
+                        </td>
+                        <td style="padding: 8px; border: 1px solid #ddd; color: red;">
+                            ${resultado.pastasFaltantes.length > 0 ? 
+                                resultado.pastasFaltantes.join(', ') : 'Nenhuma'}
+                        </td>
+                    </tr>
+                `).join('')}
+            </tbody>
+        `;
+        
+        container.appendChild(tabela);
+    } else {
+        container.innerHTML += `<p style="color: green; font-weight: bold;">🎉 Todos os clientes estão com a estrutura correta!</p>`;
+    }
+    
+    container.innerHTML += `</div>`;
+    
+    // Adiciona toggle para mostrar/ocultar detalhes
+    container.querySelector('#toggleEstrutura').addEventListener('click', function() {
+        const detalhes = container.querySelector('#detalhesEstrutura');
+        if (detalhes.style.display === 'none') {
+            detalhes.style.display = 'block';
+            this.textContent = 'Ocultar Detalhes';
+        } else {
+            detalhes.style.display = 'none';
+            this.textContent = 'Mostrar Detalhes';
+        }
+    });
+    
+    document.querySelector('.container').appendChild(container);
+}
+
+function adicionarBotaoVerificacaoEstrutura() {
+    const processBtn = document.getElementById('processFolderBtn');
+    if (!processBtn) {
+        setTimeout(adicionarBotaoVerificacaoEstrutura, 1000);
+        return;
+    }
+    
+    // Remove botão anterior se existir
+    const btnAnterior = document.getElementById('btnVerificarEstrutura');
+    if (btnAnterior) {
+        btnAnterior.remove();
+    }
+    
+    const btn = document.createElement('button');
+    btn.id = 'btnVerificarEstrutura';
+    btn.textContent = '🔍 Verificar Estrutura de Pastas';
+    btn.style.margin = '10px 0';
+    btn.style.padding = '10px 15px';
+    btn.style.backgroundColor = '#17a2b8';
+    btn.style.color = 'white';
+    btn.style.border = 'none';
+    btn.style.borderRadius = '5px';
+    btn.style.cursor = 'pointer';
+    btn.style.fontWeight = 'bold';
+    
+    btn.addEventListener('click', async function() {
+        if (!accessToken) {
+            alert('Por favor, autentique-se primeiro!');
+            return;
+        }
+        
+        const folderUrl = document.getElementById('folderUrl').value.trim();
+        if (!folderUrl) {
+            alert('Cole o link da pasta primeiro!');
+            return;
+        }
+        
+        const folderId = extractFolderIdFromUrl(folderUrl);
+        if (!folderId) {
+            alert('URL da pasta inválida!');
+            return;
+        }
+        
+        try {
+            document.getElementById('loading').style.display = 'block';
+            document.getElementById('progressBar').style.width = '0%';
+            btn.disabled = true;
+            btn.textContent = 'Verificando...';
+            
+            // Busca todas as pastas
+            const response = await makeDriveRequest('files', {
+                q: `'${folderId}' in parents and mimeType = 'application/vnd.google-apps.folder'`,
+                fields: 'files(id, name)',
+                pageSize: 1000
+            });
+            
+            // Filtra apenas pastas com os prefixos permitidos
+            const prefixosPermitidos = ['LP', 'LR', 'ASSOC.', 'MEI', 'C', 'COO', 'SN'];
+            const pastasFiltradas = response.files.filter(folder => 
+                prefixosPermitidos.some(prefixo => 
+                    folder.name.toUpperCase().startsWith(prefixo.toUpperCase())
+                )
+            );
+            
+            if (pastasFiltradas.length === 0) {
+                alert('Nenhuma pasta com os prefixos LP, LR, ASSOC., MEI, C, COO ou SN foi encontrada!');
+                return;
+            }
+            
+            // Processa em lotes com barra de progresso
+            const resultados = [];
+            const BATCH_SIZE = 5;
+            
+            for (let i = 0; i < pastasFiltradas.length; i += BATCH_SIZE) {
+                const batch = pastasFiltradas.slice(i, i + BATCH_SIZE);
+                const batchResults = await Promise.all(
+                    batch.map(folder => verificarEstruturaPastas(folder))
+                );
+                
+                // Filtra resultados nulos e adiciona ao array
+                resultados.push(...batchResults.filter(r => r !== null));
+                
+                // Atualiza barra de progresso
+                const progresso = ((i + batch.length) / pastasFiltradas.length) * 100;
+                document.getElementById('progressBar').style.width = `${progresso}%`;
+                document.getElementById('status').textContent = 
+                    `Verificando estrutura: ${Math.min(i + BATCH_SIZE, pastasFiltradas.length)}/${pastasFiltradas.length}`;
+                
+                // Pequeno delay para não sobrecarregar a API
+                if (i + BATCH_SIZE < pastasFiltradas.length) {
+                    await new Promise(resolve => setTimeout(resolve, 300));
+                }
+            }
+            
+            // Completa a barra de progresso
+            document.getElementById('progressBar').style.width = '100%';
+            exibirVerificacaoEstrutura(resultados);
+            
+        } catch (error) {
+            console.error('Erro:', error);
+            alert('Erro ao verificar estrutura: ' + error.message);
+        } finally {
+            document.getElementById('loading').style.display = 'none';
+            btn.disabled = false;
+            btn.textContent = '🔍 Verificar Estrutura de Pastas';
+        }
+    });
+    
+    // Adiciona o botão após o botão de processar pasta
+    processBtn.parentNode.insertBefore(btn, processBtn.nextSibling);
+}
+
+function verificarAutenticacao() {
+    if (!accessToken) {
+        alert('Por favor, autentique-se primeiro com o Google Drive!');
+        return false;
+    }
+    return true;
+}
+
+function adicionarInfoPadrao() {
+    const infoDiv = document.createElement('div');
+    infoDiv.style.margin = '15px 0';
+    infoDiv.style.padding = '15px';
+    infoDiv.style.backgroundColor = '#e8f5e9';
+    infoDiv.style.borderRadius = '5px';
+    infoDiv.style.border = '1px solid #c8e6c9';
+    
+    infoDiv.innerHTML = `
+        <h4>📋 Padrão de Pastas (apenas para LP, LR, ASSOC., MEI, C, COO, SN)</h4>
+        <p><strong>Para TODOS os clientes:</strong></p>
+        <ul style="margin: 5px 0 15px 20px;">
+            <li>1 DEPTO CONTABIL</li>
+            <li>2 DEPTO FISCAL</li>
+            <li>3 DEPTO PESSOAL</li>
+            <li>4 DEPTO LEGALIZAÇÃO</li>
+            <li>CERTIDÕES</li>
+            <li>CERTIFICADO DIGITAL</li>
+            <li>DIVERSOS</li>
+            <li>PROCURADORIA</li>
+        </ul>
+        <p><strong>Apenas para clientes NORMAIS (não SN/MEI/LP/LR):</strong></p>
+        <ul style="margin: 5px 0 0 20px;">
+            <li>ASSEMBLEIAS</li>
+            <li>OCEB</li>
+        </ul>
+        <p><strong>SN, MEI, LP e LR NÃO PRECISAM de ASSEMBLEIAS e OCEB</strong></p>
+    `;
+    
+    const driveInput = document.querySelector('.drive-folder-input');
+    if (driveInput) {
+        driveInput.appendChild(infoDiv);
+    }
+}
+
+// Chama as funções quando a página carregar
+document.addEventListener('DOMContentLoaded', function() {
+     setTimeout(() => {
+        const btn = document.getElementById('btnVerificarEstrutura');
+        if (btn) {
+            btn.addEventListener('click', function(e) {
+                if (!verificarAutenticacao()) {
+                    e.preventDefault();
+                    return false;
+                }
+            });
+        }
+    }, 2000);
+    
+    // Adiciona o botão após um delay maior para garantir que o DOM esteja carregado
+    setTimeout(adicionarBotaoVerificacaoEstrutura, 2000);
+});
+
     
     // Inicializar quando a página carregar
     document.addEventListener('DOMContentLoaded', function() {

@@ -285,7 +285,7 @@
             <h3>URL da Pasta no Google Drive</h3>
             <p>Cole o link da pasta principal que contém as subpastas dos clientes</p>
             <input type="text" id="folderUrl" placeholder="https://drive.google.com/drive/folders/ABC123...">
-            <button id="processFolderBtn">Processar Pasta</button> <br><br>
+            <button id="processFolderBtn">Processar Pasta</button>
         </div>
         
         <div class="progress-container">
@@ -489,6 +489,9 @@ function exibirVerificacaoEstrutura(resultados) {
         <p><strong>Clientes verificados:</strong> ${resultadosFiltrados.length} (apenas LP, LR, ASSOC., MEI, C, COO, SN)</p>
         <p style="color: green;"><strong>✅ No padrão:</strong> ${clientesNoPadrao.length}</p>
         <p style="color: red;"><strong>❌ Fora do padrão:</strong> ${clientesForaPadrao.length}</p>
+        <button id="toggleEstrutura" style="margin: 10px 0; padding: 5px 10px; background: #6c757d; color: white; border: none; border-radius: 3px; cursor: pointer;">
+            Mostrar Detalhes
+        </button>
         <div id="detalhesEstrutura" style="display: none;">
             <h4>Clientes Fora do Padrão:</h4>
     `;

@@ -585,7 +585,6 @@
         document.getElementById('loading').style.display = 'none';
     }
 }
-// ⚡ FUNÇÃO CORRIGIDA para verificar certificado com suporte a pastas de ano
 async function checkCertificateForFolder(folder) {
     try {
         document.getElementById('currentFolder').textContent = folder.name;
@@ -610,22 +609,28 @@ async function checkCertificateForFolder(folder) {
             pageSize: 1
         });
         
-        if (cnpjResponse.files.length === 0) {
-            return { cliente: folder.name, certificado: 'Não tem', data: '-' };
-        }
+        // Se não encontrou a pasta 1 E-CNPJ, verifica se há pastas de ano diretamente em CERTIFICADO DIGITAL
+        let targetFolderId = cnpjResponse.files.length > 0 ? cnpjResponse.files[0].id : certFolderId;
         
-        const cnpjFolderId = cnpjResponse.files[0].id;
-        
-        // PRIMEIRO: Procura arquivos diretamente na pasta 1 E-CNPJ
-        const filesDirectResponse = await makeDriveRequest('files', {
-            q: `'${cnpjFolderId}' in parents and mimeType != 'application/vnd.google-apps.folder'`,
-            fields: 'files(createdTime)',
+        // Busca TODOS os arquivos e pastas no diretório alvo
+        const allContentsResponse = await makeDriveRequest('files', {
+            q: `'${targetFolderId}' in parents`,
+            fields: 'files(id, name, mimeType, createdTime)',
             orderBy: 'createdTime desc',
-            pageSize: 5
+            pageSize: 50
         });
         
-        if (filesDirectResponse.files.length > 0) {
-            const latestFile = filesDirectResponse.files[0];
+        if (allContentsResponse.files.length === 0) {
+            return { cliente: folder.name, certificado: 'Pasta vazia', data: '-' };
+        }
+        
+        // Separa arquivos e pastas
+        const files = allContentsResponse.files.filter(item => item.mimeType !== 'application/vnd.google-apps.folder');
+        const folders = allContentsResponse.files.filter(item => item.mimeType === 'application/vnd.google-apps.folder');
+        
+        // Se encontrou arquivos diretamente, pega o mais recente
+        if (files.length > 0) {
+            const latestFile = files[0]; // Já ordenado por createdTime desc
             const createdDate = new Date(latestFile.createdTime);
             const formattedDate = createdDate.toLocaleDateString('pt-BR');
             
@@ -636,62 +641,58 @@ async function checkCertificateForFolder(folder) {
             };
         }
         
-        // SEGUNDO: Se não encontrou arquivos, procura por pastas de ano
-        // Primeiro busca TODAS as pastas dentro de 1 E-CNPJ
-        const allFoldersResponse = await makeDriveRequest('files', {
-            q: `'${cnpjFolderId}' in parents and mimeType = 'application/vnd.google-apps.folder'`,
-            fields: 'files(id, name)',
-            pageSize: 20
-        });
-        
-        if (allFoldersResponse.files.length === 0) {
-            return { cliente: folder.name, certificado: 'Pasta vazia', data: '-' };
-        }
-        
-        // Filtra apenas pastas que parecem ser anos (contém números)
-        const yearFolders = allFoldersResponse.files.filter(folder => 
-            /\d/.test(folder.name) && // Contém números
-            (folder.name.includes('202') || // Especificamente anos recentes
-             folder.name.match(/\b(20[0-9]{2})\b/) || // Anos 2000+
-             folder.name.match(/\b(19[0-9]{2})\b/)) // Anos 1900+ (raro, mas possível)
-        );
-        
-        if (yearFolders.length === 0) {
-            return { cliente: folder.name, certificado: 'Pasta vazia', data: '-' };
-        }
-        
-        // Ordena pastas por nome (para pegar o ano mais recente primeiro)
-        yearFolders.sort((a, b) => b.name.localeCompare(a.name));
-        
-        // Procura arquivos em cada pasta de ano (começando pela mais recente)
-        for (const yearFolder of yearFolders) {
-            try {
-                const yearFilesResponse = await makeDriveRequest('files', {
-                    q: `'${yearFolder.id}' in parents and mimeType != 'application/vnd.google-apps.folder'`,
-                    fields: 'files(createdTime, name)',
-                    orderBy: 'createdTime desc',
-                    pageSize: 5
-                });
-                
-                if (yearFilesResponse.files.length > 0) {
-                    const latestFile = yearFilesResponse.files[0];
-                    const createdDate = new Date(latestFile.createdTime);
-                    const formattedDate = createdDate.toLocaleDateString('pt-BR');
+        // Se não encontrou arquivos, procura por pastas de ano
+        if (folders.length > 0) {
+            // Filtra apenas pastas que parecem ser anos (contém números)
+            const yearFolders = folders.filter(folder => 
+                /\d{4}/.test(folder.name) // Contém 4 dígitos (anos)
+            );
+            
+            if (yearFolders.length === 0) {
+                return { cliente: folder.name, certificado: 'Pasta vazia', data: '-' };
+            }
+            
+            // Para cada pasta de ano, busca arquivos e coleta o mais recente
+            let latestCertificate = null;
+            
+            for (const yearFolder of yearFolders) {
+                try {
+                    const yearFilesResponse = await makeDriveRequest('files', {
+                        q: `'${yearFolder.id}' in parents and mimeType != 'application/vnd.google-apps.folder'`,
+                        fields: 'files(createdTime, name)',
+                        orderBy: 'createdTime desc',
+                        pageSize: 5
+                    });
                     
-                    return { 
-                        cliente: folder.name, 
-                        certificado: `Encontrado (${yearFolder.name})`, 
-                        data: formattedDate 
-                    };
+                    if (yearFilesResponse.files.length > 0) {
+                        const yearLatestFile = yearFilesResponse.files[0];
+                        const createdDate = new Date(yearLatestFile.createdTime);
+                        
+                        // Se não temos um certificado ainda ou este é mais recente
+                        if (!latestCertificate || createdDate > latestCertificate.date) {
+                            latestCertificate = {
+                                date: createdDate,
+                                year: yearFolder.name
+                            };
+                        }
+                    }
+                } catch (error) {
+                    console.warn(`Erro na pasta de ano ${yearFolder.name}:`, error);
+                    continue;
                 }
-            } catch (error) {
-                console.warn(`Erro na pasta de ano ${yearFolder.name}:`, error);
-                // Continua para a próxima pasta mesmo com erro
-                continue;
+            }
+            
+            if (latestCertificate) {
+                const formattedDate = latestCertificate.date.toLocaleDateString('pt-BR');
+                return { 
+                    cliente: folder.name, 
+                    certificado: `Encontrado (${latestCertificate.year})`, 
+                    data: formattedDate 
+                };
             }
         }
         
-        // Se não encontrou arquivos em nenhuma pasta de ano
+        // Se não encontrou arquivos em nenhuma pasta
         return { cliente: folder.name, certificado: 'Pasta vazia', data: '-' };
         
     } catch (error) {

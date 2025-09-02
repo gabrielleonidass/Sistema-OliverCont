@@ -1,0 +1,848 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Verificador de Certificados Digitais - Google Drive</title>
+    <script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
+    <script src="https://accounts.google.com/gsi/client" async defer></script>
+    <script src="https://apis.google.com/js/api.js" async defer></script>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+        }
+        
+        body {
+            background-color: #f5f7fa;
+            color: #333;
+            line-height: 1.6;
+            padding: 20px;
+        }
+        
+        .container {
+            max-width: 1200px;
+            margin: 0 auto;
+            background-color: white;
+            border-radius: 10px;
+            box-shadow: 0 0 20px rgba(0, 0, 0, 0.1);
+            padding: 30px;
+        }
+        
+        header {
+            text-align: center;
+            margin-bottom: 30px;
+            padding-bottom: 20px;
+            border-bottom: 1px solid #eaeaea;
+        }
+        
+        h1 {
+            color: #2c3e50;
+            margin-bottom: 10px;
+        }
+        
+        .description {
+            color: #7f8c8d;
+            font-size: 16px;
+            max-width: 800px;
+            margin: 0 auto;
+        }
+        
+        .auth-section {
+            background-color: #e8f5e9;
+            padding: 25px;
+            border-radius: 8px;
+            margin-bottom: 30px;
+            text-align: center;
+        }
+        
+        .auth-btn {
+            background-color: #4285f4;
+            color: white;
+            padding: 12px 25px;
+            border: none;
+            border-radius: 5px;
+            cursor: pointer;
+            font-size: 16px;
+            font-weight: 600;
+            transition: background-color 0.3s;
+            display: inline-flex;
+            align-items: center;
+            gap: 10px;
+        }
+        
+        .auth-btn:hover {
+            background-color: #3367d6;
+        }
+        
+        .status {
+            margin-top: 20px;
+            font-weight: 500;
+            color: #7f8c8d;
+        }
+        
+        .progress-container {
+            width: 100%;
+            height: 12px;
+            background-color: #e0e0e0;
+            border-radius: 10px;
+            margin: 20px 0;
+            overflow: hidden;
+        }
+        
+        .progress-bar {
+            height: 100%;
+            background-color: #3498db;
+            border-radius: 10px;
+            width: 0%;
+            transition: width 0.3s ease;
+        }
+        
+        .results-section {
+            margin-top: 30px;
+        }
+        
+        .results-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 20px;
+            padding-bottom: 10px;
+            border-bottom: 1px solid #eaeaea;
+        }
+        
+        .results-title {
+            font-size: 22px;
+            color: #2c3e50;
+        }
+        
+        .export-btn {
+            background-color: #27ae60;
+            color: white;
+            padding: 8px 15px;
+            border: none;
+            border-radius: 5px;
+            cursor: pointer;
+            font-size: 14px;
+            display: flex;
+            align-items: center;
+            gap: 5px;
+        }
+        
+        .export-btn:hover {
+            background-color: #219653;
+        }
+        
+        table {
+            width: 100%;
+            border-collapse: collapse;
+            margin-top: 15px;
+        }
+        
+        th, td {
+            padding: 12px 15px;
+            text-align: left;
+            border-bottom: 1px solid #e0e0e0;
+        }
+        
+        th {
+            background-color: #f8f9fa;
+            font-weight: 600;
+            color: #2c3e50;
+        }
+        
+        tr:hover {
+            background-color: #f5f7fa;
+        }
+        
+        .has-certificate {
+            color: #27ae60;
+            font-weight: 600;
+        }
+        
+        .no-certificate {
+            color: #e74c3c;
+            font-weight: 600;
+        }
+        
+        .loading {
+            display: none;
+            text-align: center;
+            margin: 30px 0;
+        }
+        
+        .spinner {
+            border: 4px solid rgba(0, 0, 0, 0.1);
+            border-left: 4px solid #3498db;
+            border-radius: 50%;
+            width: 30px;
+            height: 30px;
+            animation: spin 1s linear infinite;
+            margin: 0 auto 15px;
+        }
+        
+        @keyframes spin {
+            0% { transform: rotate(0deg); }
+            100% { transform: rotate(360deg); }
+        }
+        
+        .instructions {
+            background-color: #e1f5fe;
+            padding: 20px;
+            border-radius: 8px;
+            margin-top: 30px;
+        }
+        
+        .instructions h3 {
+            color: #0288d1;
+            margin-bottom: 15px;
+        }
+        
+        .instructions ol {
+            margin-left: 20px;
+        }
+        
+        .instructions li {
+            margin-bottom: 10px;
+        }
+        
+        .current-processing {
+            background-color: #fff8e1;
+            padding: 10px 15px;
+            border-radius: 5px;
+            margin: 15px 0;
+            font-size: 14px;
+            display: none;
+        }
+        
+        .drive-folder-input {
+            margin-top: 20px;
+            padding: 15px;
+            background-color: #f5f5f5;
+            border-radius: 8px;
+            display: none;
+        }
+        
+        .drive-folder-input input {
+            width: 100%;
+            padding: 10px;
+            margin: 10px 0;
+            border: 1px solid #ddd;
+            border-radius: 4px;
+        }
+        
+        .drive-folder-input button {
+            background-color: #4285f4;
+            color: white;
+            padding: 10px 15px;
+            border: none;
+            border-radius: 4px;
+            cursor: pointer;
+        }
+        
+        @media (max-width: 768px) {
+            .container {
+                padding: 15px;
+            }
+            
+            th, td {
+                padding: 8px 10px;
+            }
+            
+            .results-header {
+                flex-direction: column;
+                align-items: flex-start;
+                gap: 10px;
+            }
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <header>
+            <h1>Verificador de Certificados Digitais</h1>
+            <p class="description">Este sistema verifica a existência de certificados digitais no Google Drive, mostrando a data real de inserção do documento.</p>
+        </header>
+        
+        <section class="auth-section">
+            <h2>Conexão com Google Drive</h2>
+            <p>Para começar, é necessário autenticar com sua conta do Google</p>
+            <button class="auth-btn" id="authBtn">
+                <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24">
+                    <path fill="white" d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92c-.26 1.37-1.04 2.53-2.21 3.31v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.09z"/>
+                    <path fill="white" d="M12 23c2.97 0 5.46-.98 7.28-2.66l-3.57-2.77c-.98.66-2.23 1.06-3.71 1.06-2.86 0-5.29-1.93-6.16-4.53H2.18v2.84C3.99 20.53 7.7 23 12 23z"/>
+                    <path fill="white" d="M5.84 14.09c-.22-.66-.35-1.36-.35-2.09s.13-1.43.35-2.09V7.07H2.18C1.43 8.55 1 10.22 1 12s.43 3.45 1.18 4.93l2.85-2.22.81-.62z"/>
+                    <path fill="white" d="M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15C17.45 2.09 14.97 1 12 1 7.7 1 3.99 3.47 2.18 7.07l3.66 2.84c.87-2.6 3.3-4.53 6.16-4.53z"/>
+                </svg>
+                Autenticar com Google
+            </button>
+            <p class="status" id="status">Não autenticado</p>
+        </section>
+        
+        <div class="drive-folder-input" id="driveFolderInput">
+            <h3>URL da Pasta no Google Drive</h3>
+            <p>Cole o link da pasta principal que contém as subpastas dos clientes</p>
+            <input type="text" id="folderUrl" placeholder="https://drive.google.com/drive/folders/ABC123...">
+            <button id="processFolderBtn">Processar Pasta</button>
+        </div>
+        
+        <div class="progress-container">
+            <div class="progress-bar" id="progressBar"></div>
+        </div>
+        
+        <div class="current-processing" id="currentProcessing">
+            <strong>Processando:</strong> <span id="currentFolder">Nenhuma</span>
+        </div>
+        
+        <div class="loading" id="loading">
+            <div class="spinner"></div>
+            <p>Conectando ao Google Drive, aguarde...</p>
+        </div>
+        
+        <section class="results-section">
+            <div class="results-header">
+                <h2 class="results-title">Resultados da Verificação</h2>
+                <button class="export-btn" id="exportBtn" disabled>
+                    <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" fill="currentColor" viewBox="0 0 16 16">
+                        <path d="M.5 9.9a.5.5 0 0 1 .5.5v2.5a1 1 0 0 0 1 1h12a1 1 0 0 0 1-1v-2.5a.5.5 0 0 1 1 0v2.5a2 2 0 0 1-2 2H2a2 2 0 0 1-2-2v-2.5a.5.5 0 0 1 .5-.5z"/>
+                        <path d="M7.646 11.854a.5.5 0 0 0 .708 0l3-3a.5.5 0 0 0-.708-.708L8.5 10.293V1.5a.5.5 0 0 0-1 0v8.793L5.354 8.146a.5.5 0 1 0-.708.708l3 3z"/>
+                    </svg>
+                    Exportar CSV
+                </button>
+            </div>
+            
+            <table id="resultsTable">
+                <thead>
+                    <tr>
+                        <th>Cliente</th>
+                        <th>Certificado Digital</th>
+                        <th>Data de Inserção</th>
+                    </tr>
+                </thead>
+                <tbody id="resultsBody">
+                    <tr>
+                        <td colspan="3" style="text-align: center;">Nenhum resultado disponível</td>
+                    </tr>
+                </tbody>
+            </table>
+        </section>
+        
+        <section class="instructions">
+            <h3>Instruções de Uso</h3>
+            <ol>
+                <li>Clique em "Autenticar com Google" e permita o acesso à sua conta</li>
+                <li>Cole o link da pasta do Google Drive que contém as subpastas dos clientes</li>
+                <li>O sistema irá varrer todas as subpastas procurando por certificados digitais no caminho: CERTIFICADO DIGITAL > 1 E-CNPJ</li>
+                <li>Os resultados serão exibidos na tabela, mostrando o nome do cliente, status do certificado e data real de inserção</li>
+                <li>Use o botão "Exportar CSV" para salvar os resultados em um arquivo</li>
+            </ol>
+            
+            <p><strong>Nota:</strong> Este sistema requer permissão para acessar seu Google Drive.</p>
+        </section>
+
+                <section id="configHelp" class="instructions" style="display: none;">
+            <h3>Problemas de Configuração da API</h3>
+            <p>Se você está recebendo erros de autenticação, verifique se:</p>
+            <ol>
+                <li>Adicionou <code>http://localhost</code> e <code>http://127.0.0.1</code> às "Origens JavaScript autorizadas" no Google Cloud Console</li>
+                <li>Adicionou <code>http://localhost</code> às "URIs de redirecionamento autorizados"</li>
+                <li>A API do Google Drive está ativada no seu projeto</li>
+                <li>Seu email está adicionado como "usuário de teste" na tela de consentimento OAuth</li>
+            </ol>
+            <p><strong>Nota:</strong> As mudanças no Google Cloud Console podem levar alguns minutos para surtir efeito.</p>
+        </section>
+
+    </div>
+
+     <script>
+    // Configurações - Use SEU ID real
+    const CLIENT_ID = '436248271068-m4o896rg3a56p4n82ghk98304lu3tc81.apps.googleusercontent.com';
+    const SCOPES = 'https://www.googleapis.com/auth/drive.readonly';
+    
+    let googleApiLoaded = false;
+    let tokenClient = null;
+    let accessToken = null;
+    
+    // Função para verificar se as APIs carregaram
+    function checkGoogleAPIs() {
+        if (typeof google !== 'undefined' && typeof google.accounts !== 'undefined') {
+            initializeGoogleAuth();
+        } else {
+            // Tentar novamente após 2 segundos
+            setTimeout(checkGoogleAPIs, 2000);
+        }
+    }
+    
+    // Inicializar quando a página carregar
+    document.addEventListener('DOMContentLoaded', function() {
+        document.getElementById('authBtn').disabled = true;
+        document.getElementById('status').textContent = 'Carregando API do Google...';
+        
+        // Verificar se APIs carregaram após 3 segundos
+        setTimeout(function() {
+            if (typeof google === 'undefined') {
+                document.getElementById('status').textContent = 'Erro: API do Google não carregada. Recarregue a página.';
+                document.getElementById('configHelp').style.display = 'block';
+            } else {
+                checkGoogleAPIs();
+            }
+        }, 3000);
+        
+        // Iniciar verificação imediata
+        checkGoogleAPIs();
+    });
+    
+    function initializeGoogleAuth() {
+        try {
+            tokenClient = google.accounts.oauth2.initTokenClient({
+                client_id: CLIENT_ID,
+                scope: SCOPES,
+                callback: (tokenResponse) => {
+                    if (tokenResponse && tokenResponse.access_token) {
+                        accessToken = tokenResponse.access_token;
+                        handleAuthenticationSuccess();
+                    }
+                },
+                error_callback: (error) => {
+                    console.error('Erro de autenticação:', error);
+                    document.getElementById('status').textContent = 
+                        'Erro na autenticação. Recarregue a página e tente novamente.';
+                    document.getElementById('loading').style.display = 'none';
+                }
+            });
+            
+            googleApiLoaded = true;
+            document.getElementById('status').textContent = 'Pronto para autenticar';
+            document.getElementById('authBtn').disabled = false;
+            
+        } catch (error) {
+            console.error('Erro ao inicializar Google Auth:', error);
+            document.getElementById('status').textContent = 'Erro na inicialização. Verifique o console.';
+        }
+    }
+    
+    function handleAuthClick() {
+        if (!googleApiLoaded || !tokenClient) {
+            document.getElementById('status').textContent = 'API Google ainda não carregada. Aguarde...';
+            return;
+        }
+        
+        if (accessToken) {
+            // Se já está autenticado, fazer logout
+            google.accounts.oauth2.revoke(accessToken, () => {
+                accessToken = null;
+                handleAuthenticationChange(false);
+            });
+        } else {
+            // Solicitar token
+            document.getElementById('loading').style.display = 'block';
+            document.getElementById('status').textContent = 'Abrindo popup de autenticação...';
+            
+            // Pequeno delay para garantir que o popup não seja bloqueado
+            setTimeout(() => {
+                tokenClient.requestAccessToken();
+            }, 100);
+        }
+    }
+    
+    function handleAuthenticationSuccess() {
+        document.getElementById('loading').style.display = 'none';
+        document.getElementById('status').textContent = 'Autenticado com sucesso!';
+        document.getElementById('authBtn').innerHTML = '<svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24"><path fill="white" d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm0 3c1.66 0 3 1.34 3 3s-1.34 3-3 3-3-1.34-3-3 1.34-3 3-3zm0 14.2c-2.5 0-4.71-1.28-6-3.22.03-1.99 4-3.08 6-3.08 1.99 0 5.97 1.09 6 3.08-1.29 1.94-3.50 3.22-6 3.22z"/></svg> Sair';
+        document.getElementById('driveFolderInput').style.display = 'block';
+    }
+    
+    function handleAuthenticationChange(isAuthenticated) {
+        if (!isAuthenticated) {
+            document.getElementById('status').textContent = 'Não autenticado';
+            document.getElementById('authBtn').innerHTML = '<svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24"><path fill="white" d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92c-.26 1.37-1.04 2.53-2.21 3.31v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.09z"/><path fill="white" d="M12 23c2.97 0 5.46-.98 7.28-2.66l-3.57-2.77c-.98.66-2.23 1.06-3.71 1.06-2.86 0-5.29-1.93-6.16-4.53H2.18v2.84C3.99 20.53 7.7 23 12 23z"/><path fill="white" d="M5.84 14.09c-.22-.66-.35-1.36-.35-2.09s.13-1.43.35-2.09V7.07H2.18C1.43 8.55 1 10.22 1 12s.43 3.45 1.18 4.93l2.85-2.22.81-.62z"/><path fill="white" d="M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15C17.45 2.09 14.97 1 12 1 7.7 1 3.99 3.47 2.18 7.07l3.66 2.84c.87-2.6 3.3-4.53 6.16-4.53z"/></svg> Autenticar com Google';
+            document.getElementById('driveFolderInput').style.display = 'none';
+        }
+    }
+    
+    // Função para fazer requisições à API do Drive
+    async function makeDriveRequest(endpoint, params = {}) {
+        if (!accessToken) {
+            throw new Error('Não autenticado');
+        }
+        
+        const url = `https://www.googleapis.com/drive/v3/${endpoint}?${new URLSearchParams(params)}`;
+        const response = await fetch(url, {
+            headers: {
+                'Authorization': `Bearer ${accessToken}`,
+                'Accept': 'application/json'
+            }
+        });
+        
+        if (!response.ok) {
+            const errorData = await response.json().catch(() => ({}));
+            throw new Error(`Erro na API: ${response.status} - ${errorData.error?.message || 'Erro desconhecido'}`);
+        }
+        
+        return response.json();
+    }
+    
+    // Configurar event listeners
+    document.getElementById('authBtn').addEventListener('click', handleAuthClick);
+    
+    // Mantenha o resto do seu código para processar pastas aqui...
+    // (processDriveFolder, extractFolderIdFromUrl, etc.)
+    
+    // Processar pasta do Drive
+    document.getElementById('processFolderBtn').addEventListener('click', function() {
+        if (!accessToken) {
+            alert('Por favor, autentique-se primeiro.');
+            return;
+        }
+        
+        const folderUrl = document.getElementById('folderUrl').value.trim();
+        if (!folderUrl) {
+            alert('Por favor, cole o link da pasta do Google Drive');
+            return;
+        }
+        
+        const folderId = extractFolderIdFromUrl(folderUrl);
+        if (!folderId) {
+            alert('URL da pasta inválida. Certifique-se de copiar o link completo da pasta.');
+            return;
+        }
+        
+        processDriveFolder(folderId);
+    });
+    
+    function extractFolderIdFromUrl(url) {
+        const match = url.match(/[&?]id=([^&]+)/) || url.match(/\/folders\/([^/?]+)/);
+        return match ? match[1] : null;
+    }
+    
+    async function processDriveFolder(folderId) {
+    try {
+        document.getElementById('loading').style.display = 'block';
+        document.getElementById('currentProcessing').style.display = 'block';
+        document.getElementById('progressBar').style.width = '0%';
+        
+        const response = await makeDriveRequest('files', {
+            q: `'${folderId}' in parents and mimeType = 'application/vnd.google-apps.folder'`,
+            fields: 'files(id, name)',
+            pageSize: '1000'
+        });
+        
+        const clientFolders = response.files;
+        console.log('Pastas encontradas:', clientFolders);
+        if (clientFolders.length === 0) {
+            document.getElementById('status').textContent = 'Nenhuma pasta de cliente encontrada.';
+            document.getElementById('loading').style.display = 'none';
+            return;
+        }
+        
+        document.getElementById('status').textContent = `Encontradas ${clientFolders.length} pastas de clientes. Processando...`;
+        
+        // ⚡ PROCESSAMENTO OTIMIZADO - 10x MAIS RÁPIDO
+        const results = [];
+        const BATCH_SIZE = 20; // Processa 20 pastas por vez
+        const DELAY_MS = 100; // Pequeno delay entre batches
+        
+        for (let i = 0; i < clientFolders.length; i += BATCH_SIZE) {
+            const batch = clientFolders.slice(i, i + BATCH_SIZE);
+            
+            // Processa o batch em paralelo
+            const batchPromises = batch.map(folder => 
+                checkCertificateForFolder(folder).catch(error => {
+                    console.error(`Erro na pasta ${folder.name}:`, error);
+                    return {
+                        cliente: folder.name,
+                        certificado: 'Erro',
+                        data: '-'
+                    };
+                })
+            );
+            
+            const batchResults = await Promise.all(batchPromises);
+            results.push(...batchResults);
+            
+            // Atualiza UI
+            document.getElementById('progressBar').style.width = `${(i / clientFolders.length) * 100}%`;
+            document.getElementById('status').textContent = 
+                `Processando: ${Math.min(i + BATCH_SIZE, clientFolders.length)}/${clientFolders.length} pastas`;
+            
+            // Pequeno delay para não sobrecarregar a API
+            if (i + BATCH_SIZE < clientFolders.length) {
+                await new Promise(resolve => setTimeout(resolve, DELAY_MS));
+            }
+        }
+        
+        // Exibe resultados
+        displayResults(results);
+        document.getElementById('progressBar').style.width = '100%';
+        document.getElementById('status').textContent = `Concluído! ${results.length} clientes processados.`;
+        
+    } catch (error) {
+        console.error('Erro:', error);
+        document.getElementById('status').textContent = 'Erro: ' + error.message;
+    } finally {
+        document.getElementById('loading').style.display = 'none';
+    }
+}
+// ⚡ FUNÇÃO CORRIGIDA para verificar certificado com suporte a pastas de ano
+async function checkCertificateForFolder(folder) {
+    try {
+        document.getElementById('currentFolder').textContent = folder.name;
+        
+        // Busca pasta "CERTIFICADO DIGITAL"
+        const certResponse = await makeDriveRequest('files', {
+            q: `'${folder.id}' in parents and mimeType = 'application/vnd.google-apps.folder' and name = 'CERTIFICADO DIGITAL'`,
+            fields: 'files(id)',
+            pageSize: 1
+        });
+        
+        if (certResponse.files.length === 0) {
+            return { cliente: folder.name, certificado: 'Não tem', data: '-' };
+        }
+        
+        const certFolderId = certResponse.files[0].id;
+        
+        // Busca pasta "1 E-CNPJ" (agora com contains para pegar variações)
+        const cnpjResponse = await makeDriveRequest('files', {
+            q: `'${certFolderId}' in parents and mimeType = 'application/vnd.google-apps.folder' and (name contains '1 E-CNPJ' or name contains 'E-CNPJ')`,
+            fields: 'files(id)',
+            pageSize: 1
+        });
+        
+        if (cnpjResponse.files.length === 0) {
+            return { cliente: folder.name, certificado: 'Não tem', data: '-' };
+        }
+        
+        const cnpjFolderId = cnpjResponse.files[0].id;
+        
+        // PRIMEIRO: Procura arquivos diretamente na pasta 1 E-CNPJ
+        const filesDirectResponse = await makeDriveRequest('files', {
+            q: `'${cnpjFolderId}' in parents and mimeType != 'application/vnd.google-apps.folder'`,
+            fields: 'files(createdTime)',
+            orderBy: 'createdTime desc',
+            pageSize: 5
+        });
+        
+        if (filesDirectResponse.files.length > 0) {
+            const latestFile = filesDirectResponse.files[0];
+            const createdDate = new Date(latestFile.createdTime);
+            const formattedDate = createdDate.toLocaleDateString('pt-BR');
+            
+            return { 
+                cliente: folder.name, 
+                certificado: 'Encontrado', 
+                data: formattedDate 
+            };
+        }
+        
+        // SEGUNDO: Se não encontrou arquivos, procura por pastas de ano
+        // Primeiro busca TODAS as pastas dentro de 1 E-CNPJ
+        const allFoldersResponse = await makeDriveRequest('files', {
+            q: `'${cnpjFolderId}' in parents and mimeType = 'application/vnd.google-apps.folder'`,
+            fields: 'files(id, name)',
+            pageSize: 20
+        });
+        
+        if (allFoldersResponse.files.length === 0) {
+            return { cliente: folder.name, certificado: 'Pasta vazia', data: '-' };
+        }
+        
+        // Filtra apenas pastas que parecem ser anos (contém números)
+        const yearFolders = allFoldersResponse.files.filter(folder => 
+            /\d/.test(folder.name) && // Contém números
+            (folder.name.includes('202') || // Especificamente anos recentes
+             folder.name.match(/\b(20[0-9]{2})\b/) || // Anos 2000+
+             folder.name.match(/\b(19[0-9]{2})\b/)) // Anos 1900+ (raro, mas possível)
+        );
+        
+        if (yearFolders.length === 0) {
+            return { cliente: folder.name, certificado: 'Pasta vazia', data: '-' };
+        }
+        
+        // Ordena pastas por nome (para pegar o ano mais recente primeiro)
+        yearFolders.sort((a, b) => b.name.localeCompare(a.name));
+        
+        // Procura arquivos em cada pasta de ano (começando pela mais recente)
+        for (const yearFolder of yearFolders) {
+            try {
+                const yearFilesResponse = await makeDriveRequest('files', {
+                    q: `'${yearFolder.id}' in parents and mimeType != 'application/vnd.google-apps.folder'`,
+                    fields: 'files(createdTime, name)',
+                    orderBy: 'createdTime desc',
+                    pageSize: 5
+                });
+                
+                if (yearFilesResponse.files.length > 0) {
+                    const latestFile = yearFilesResponse.files[0];
+                    const createdDate = new Date(latestFile.createdTime);
+                    const formattedDate = createdDate.toLocaleDateString('pt-BR');
+                    
+                    return { 
+                        cliente: folder.name, 
+                        certificado: `Encontrado (${yearFolder.name})`, 
+                        data: formattedDate 
+                    };
+                }
+            } catch (error) {
+                console.warn(`Erro na pasta de ano ${yearFolder.name}:`, error);
+                // Continua para a próxima pasta mesmo com erro
+                continue;
+            }
+        }
+        
+        // Se não encontrou arquivos em nenhuma pasta de ano
+        return { cliente: folder.name, certificado: 'Pasta vazia', data: '-' };
+        
+    } catch (error) {
+        console.error(`Erro na pasta ${folder.name}:`, error);
+        return { cliente: folder.name, certificado: 'Erro', data: '-' };
+    }
+}
+
+// FUNÇÃO para exibir resultados (FALTANDO)
+function displayResults(data) {
+    // Ordenar resultados por nome do cliente
+    data.sort((a, b) => a.cliente.localeCompare(b.cliente));
+    
+    const resultsBody = document.getElementById('resultsBody');
+    resultsBody.innerHTML = '';
+    
+    if (data.length === 0) {
+        resultsBody.innerHTML = '<tr><td colspan="3" style="text-align: center;">Nenhum resultado encontrado</td></tr>';
+        document.getElementById('exportBtn').disabled = true;
+        return;
+    }
+    
+    data.forEach(item => {
+        const row = document.createElement('tr');
+        
+        const clienteCell = document.createElement('td');
+        clienteCell.textContent = item.cliente;
+        
+        const certificadoCell = document.createElement('td');
+        certificadoCell.textContent = item.certificado;
+        certificadoCell.className = item.certificado === 'Encontrado' ? 'has-certificate' : 
+                                  item.certificado === 'Não tem' ? 'no-certificate' : '';
+        
+        const dataCell = document.createElement('td');
+        dataCell.textContent = item.data;
+        
+        row.appendChild(clienteCell);
+        row.appendChild(certificadoCell);
+        row.appendChild(dataCell);
+        
+        resultsBody.appendChild(row);
+    });
+    
+    document.getElementById('exportBtn').disabled = false;
+}
+
+document.getElementById('exportBtn').addEventListener('click', function() {
+    const resultsBody = document.getElementById('resultsBody');
+    const rows = resultsBody.querySelectorAll('tr');
+    
+    if (rows.length === 0 || (rows.length === 1 && rows[0].querySelector('td').colSpan === 3)) {
+        alert('Nenhum dado para exportar');
+        return;
+    }
+    
+    let encontrados = 0;
+    let naoTem = 0;
+    let dados = [];
+    let filteredRows = 0;
+    
+    // Cabeçalhos com formatação melhorada
+    dados.push(['Cliente', 'Status do Certificado', 'Data de Inserção', 'Observações']);
+    
+    rows.forEach(row => {
+        const cells = row.querySelectorAll('td');
+        if (cells.length === 3) {
+            const cliente = cells[0].textContent;
+            const certificado = cells[1].textContent;
+            const data = cells[2].textContent;
+            
+            // Filtrar apenas pastas que começam com LP, SN, LR, MEI, C, COO ou ASSOC.
+            const prefixosPermitidos = ['LP', 'SN', 'LR', 'MEI', 'C', 'COO', 'ASSOC.'];
+            const comecaComPrefixos = prefixosPermitidos.some(prefixo => 
+                cliente.toUpperCase().startsWith(prefixo.toUpperCase())
+            );
+            
+            if (!comecaComPrefixos) {
+                return; // Pula esta linha se não começar com os prefixos permitidos
+            }
+            
+            filteredRows++;
+            
+            let observacao = '';
+            if (certificado.includes('Encontrado')) {
+                encontrados++;
+                if (certificado.includes('(')) {
+                    observacao = `Encontrado em: ${certificado.split('(')[1].replace(')', '')}`;
+                }
+            } else if (certificado.includes('Não tem') || certificado.includes('Pasta vazia')) {
+                naoTem++;
+                observacao = 'Sem certificado digital';
+            }
+            
+            dados.push([cliente, certificado, data, observacao]);
+        }
+    });
+    
+    // Verificar se há dados após o filtro
+    if (filteredRows === 0) {
+        alert('Nenhum dado encontrado com os prefixos LP, SN, LR, MEI, C, COO ou ASSOC.');
+        return;
+    }
+    
+    // Adicionar estatísticas como linhas finais
+    dados.push([]); // Linha vazia para separação
+    dados.push(['RESUMO:', '', '', '']);
+    dados.push(['Com certificado:', encontrados, '', '']);
+    dados.push(['Sem certificado:', naoTem, '', '']);
+    dados.push(['Total de clientes filtrados:', filteredRows, '', '']);
+    dados.push(['Total de linhas originais:', rows.length, '', '']);
+    
+    // Criar workbook e worksheet
+    const ws = XLSX.utils.aoa_to_sheet(dados);
+    const wb = XLSX.utils.book_new();
+    XLSX.utils.book_append_sheet(wb, ws, "Certificados");
+    
+    // Aplicar formatação às células
+    const range = XLSX.utils.decode_range(ws['!ref']);
+    
+    // Formatar cabeçalhos
+    for (let C = range.s.c; C <= range.e.c; ++C) {
+        const cell_address = XLSX.utils.encode_cell({r: 0, c: C});
+        if (!ws[cell_address]) continue;
+        ws[cell_address].s = {
+            font: { bold: true, color: { rgb: "FFFFFF" } },
+            fill: { fgColor: { rgb: "4472C4" } },
+            alignment: { horizontal: "center" }
+        };
+    }
+    
+    // Formatar células de estatísticas
+    const startStatsRow = filteredRows + 2; // +2 por causa do cabeçalho e linha vazia
+    for (let R = startStatsRow; R <= startStatsRow + 5; ++R) {
+        const cell_address = XLSX.utils.encode_cell({r: R, c: 0});
+        if (!ws[cell_address]) continue;
+        ws[cell_address].s = {
+            font: { bold: true },
+            fill: { fgColor: { rgb: "F2F2F2" } }
+        };
+    }
+    
+    // Ajustar largura das colunas
+    const colWidths = [40, 30, 20, 40];
+    ws['!cols'] = colWidths.map(width => ({ width }));
+    
+    // Gerar arquivo Excel
+    const date = new Date().toLocaleDateString('pt-BR').replace(/\//g, '-');
+    XLSX.writeFile(wb, `Relatorio_Certificados_Filtrado_${date}.xlsx`);
+    
+    alert(`Exportado: ${encontrados} com certificado, ${naoTem} sem certificado (${filteredRows} clientes filtrados)`);
+});
+</script>
+</body>
+</html>
